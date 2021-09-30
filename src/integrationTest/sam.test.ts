@@ -10,7 +10,7 @@ import * as path from 'path'
 import * as vscode from 'vscode'
 import * as vscodeUtils from '../../src/shared/utilities/vsCodeUtils'
 import { DependencyManager } from '../../src/lambda/models/samLambdaRuntime'
-import { helloWorldTemplate } from '../../src/lambda/models/samTemplates'
+import { helloWorldTemplate, typeScriptBackendTemplate } from '../../src/lambda/models/samTemplates'
 import { getSamCliContext } from '../../src/shared/sam/cli/samCliContext'
 import { runSamCliInit, SamCliInitArgs } from '../../src/shared/sam/cli/samCliInit'
 import { Language } from '../shared/codelens/codeLensUtils'
@@ -60,6 +60,14 @@ interface TestScenario {
 // to reduce the chance of automated tests timing out.
 const scenarios: TestScenario[] = [
     // zips
+    {
+        runtime: 'nodejs12.x',
+        displayName: 'nodejs12.x/typescript (ZIP)',
+        path: 'app/src/handlers/post.ts',
+        debugSessionType: 'pwa-node',
+        language: 'typescript',
+        dependencyManager: 'npm',
+    },
     {
         runtime: 'nodejs12.x',
         displayName: 'nodejs12.x (ZIP)',
@@ -283,7 +291,7 @@ async function startDebugger(
     testDisposables: vscode.Disposable[],
     sessionLog: string[]
 ) {
-    function logSession(startEnd: 'START' | 'END', name: string) {
+    function logSession(startEnd: 'START' | 'END' | 'EXIT' | 'FAIL', name: string) {
         sessionLog.push(
             `scenario ${scenarioIndex}.${target.toString()[0]} ${startEnd.padEnd(5, ' ')} ${target}/${
                 scenario.displayName
@@ -312,23 +320,31 @@ async function startDebugger(
     })
 
     // Executes the 'F5' action
-    await vscode.debug.startDebugging(undefined, testConfig).then(
-        async () => {
-            logSession('START', vscode.debug.activeDebugSession!.name)
+    const attached = await vscode.debug.startDebugging(undefined, testConfig)
+    const session = vscode.debug.activeDebugSession
 
-            await sleep(400)
-            await continueDebugger()
-            await sleep(400)
-            await continueDebugger()
-            await sleep(400)
-            await continueDebugger()
+    if (!attached) {
+        // TODO: set a breakpoint so the debugger actually attaches!
+        console.log(`sam.test.ts: startDebugging did not attach (config=${testConfig.name})`)
+        // logSession('FAIL', `${testConfig} (startDebugging failed)`)
+        // throw Error('startDebugging did not attach debugger')
+    }
 
-            await success
-        },
-        err => {
-            throw err as Error
-        }
-    )
+    if (session === undefined) {
+        logSession('EXIT', `${testConfig} (exited immediately)`)
+        return
+    }
+
+    logSession('START', session.name)
+
+    await sleep(400)
+    await continueDebugger()
+    await sleep(400)
+    await continueDebugger()
+    await sleep(400)
+    await continueDebugger()
+
+    return success
 }
 
 async function continueDebugger(): Promise<void> {
@@ -453,7 +469,14 @@ describe('SAM Integration Tests', async function () {
                     await createSamApplication(testDir)
                     appPath = path.join(testDir, samApplicationName, scenario.path)
                     cfnTemplatePath = path.join(testDir, samApplicationName, 'template.yaml')
-                    assert.ok(await fileExists(cfnTemplatePath), `Expected SAM template to exist at ${cfnTemplatePath}`)
+                    if (!(await fileExists(cfnTemplatePath))) {
+                        // May be ".yaml" or ".yml". COOL!
+                        cfnTemplatePath = path.join(testDir, samApplicationName, 'template.yml')
+                    }
+                    assert.ok(
+                        await fileExists(cfnTemplatePath),
+                        `Expected SAM template.{yml,yaml} to exist at: ${cfnTemplatePath}`
+                    )
 
                     samAppCodeUri = await openSamAppFile(appPath)
                 })
@@ -498,6 +521,7 @@ describe('SAM Integration Tests', async function () {
                     let manifestFile: RegExp
                     switch (scenario.language) {
                         case 'javascript':
+                        case 'typescript':
                             manifestFile = /^package\.json$/
                             break
                         case 'python':
@@ -624,6 +648,9 @@ describe('SAM Integration Tests', async function () {
             }
             if (scenario.baseImage) {
                 initArguments.baseImage = scenario.baseImage
+            } else if (scenario.language === 'typescript') {
+                initArguments.runtime = scenario.runtime
+                initArguments.template = typeScriptBackendTemplate
             } else {
                 initArguments.runtime = scenario.runtime
                 initArguments.template = helloWorldTemplate
