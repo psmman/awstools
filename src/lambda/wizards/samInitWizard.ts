@@ -22,7 +22,7 @@ import {
 } from '../models/samLambdaRuntime'
 import {
     eventBridgeStarterAppTemplate,
-    getSamTemplateWizardOption,
+    getSamTemplateWizardOptions,
     getTemplateDescription,
     SamTemplate,
 } from '../models/samTemplates'
@@ -67,7 +67,7 @@ function createSamTemplatePrompter(
     packageType: RuntimePackageType,
     samCliVersion: string
 ): QuickPickPrompter<SamTemplate> {
-    const templates = getSamTemplateWizardOption(currRuntime, packageType, samCliVersion)
+    const templates = getSamTemplateWizardOptions(currRuntime, packageType, samCliVersion)
     const items = templates.toArray().map(template => ({
         label: template,
         data: template,
