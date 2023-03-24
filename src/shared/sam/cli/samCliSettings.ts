@@ -5,7 +5,9 @@
 
 import { getLogger } from '../../logger'
 import { fromExtensionManifest, migrateSetting, Settings } from '../../settings'
+import { getOrInstallCli } from '../../utilities/cliUtils'
 import { stripUndefined, toRecord } from '../../utilities/collectionUtils'
+import { shared } from '../../utilities/functionUtils'
 import { ClassToInterfaceType, keys } from '../../utilities/tsUtils'
 import { DefaultSamCliLocationProvider, SamCliLocationProvider } from './samCliLocator'
 
@@ -93,10 +95,13 @@ export class SamCliSettings extends fromExtensionManifest('aws.samcli', descript
     /**
      * Gets location of `sam` from user config, or tries to find `sam` on the
      * system if the user config is invalid.
+     * @param install Prompts and installs SAM CLI locally if not found
      *
      * @returns `autoDetected=true` if auto-detection was _attempted_.
      */
-    public async getOrDetectSamCli(): Promise<{ path: string | undefined; autoDetected: boolean }> {
+    public async getOrDetectSamCli(
+        options: { install: boolean } = { install: true }
+    ): Promise<{ path: string | undefined; autoDetected: boolean }> {
         const fromConfig = this.get('location', '')
 
         if (fromConfig) {
@@ -104,8 +109,20 @@ export class SamCliSettings extends fromExtensionManifest('aws.samcli', descript
         }
 
         const fromSearch = await this.locationProvider.getLocation()
+
+        if (fromSearch?.path) {
+            return { path: fromSearch?.path, autoDetected: true }
+        }
+
+        if (options.install) {
+            const fromInstall = await this.installSamCli()
+            return { path: fromInstall, autoDetected: true }
+        }
+
         return { path: fromSearch?.path, autoDetected: true }
     }
+
+    private readonly installSamCli = shared(() => getOrInstallCli('sam-cli', true))
 
     public getSavedBuckets(): SavedBuckets | undefined {
         try {

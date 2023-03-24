@@ -5,8 +5,10 @@
 
 import * as path from 'path'
 import { EnvironmentVariables } from '../../environmentVariables'
+import { isCloud9 } from '../../extensionUtilities'
 import * as filesystemUtilities from '../../filesystemUtilities'
 import { getLogger, Logger } from '../../logger'
+import { getToolkitLocalCliPath } from '../../utilities/cliUtils'
 import { SamCliInfoInvocation } from './samCliInfo'
 import { DefaultSamCliValidator, SamCliValidatorContext, SamCliVersionValidation } from './samCliValidator'
 
@@ -51,7 +53,11 @@ abstract class BaseSamCliLocator {
             location = await this.getSystemPathLocation()
         }
 
-        this.logger.info(`SAM CLI location: ${location}`)
+        if (!location) {
+            location = await this.getToolkitLocalLocation()
+        }
+
+        this.logger.info(`SAM CLI location: ${location?.path}`)
 
         return location
     }
@@ -59,6 +65,7 @@ abstract class BaseSamCliLocator {
     protected abstract verifyOs(): void
     protected abstract getExecutableFilenames(): string[]
     protected abstract getExecutableFolders(): string[]
+    protected abstract getLocalExecutableFolders(): string[]
 
     protected async findFileInFolders(files: string[], folders: string[]) {
         const fullPaths: string[] = files
@@ -113,6 +120,10 @@ abstract class BaseSamCliLocator {
 
         return undefined
     }
+
+    private async getToolkitLocalLocation() {
+        return await this.findFileInFolders(this.getExecutableFilenames(), this.getLocalExecutableFolders())
+    }
 }
 
 class WindowsSamCliLocator extends BaseSamCliLocator {
@@ -154,6 +165,10 @@ class WindowsSamCliLocator extends BaseSamCliLocator {
 
         return WindowsSamCliLocator.locationPaths
     }
+
+    protected getLocalExecutableFolders(): string[] {
+        return [getToolkitLocalCliPath()]
+    }
 }
 
 class UnixSamCliLocator extends BaseSamCliLocator {
@@ -183,6 +198,13 @@ class UnixSamCliLocator extends BaseSamCliLocator {
     }
 
     protected getExecutableFolders(): string[] {
+        if (isCloud9()) {
+            return [path.join(getToolkitLocalCliPath(), 'sam'), ...UnixSamCliLocator.locationPaths]
+        }
         return UnixSamCliLocator.locationPaths
+    }
+
+    protected getLocalExecutableFolders(): string[] {
+        return [path.join(getToolkitLocalCliPath(), 'sam')]
     }
 }

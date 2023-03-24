@@ -21,6 +21,7 @@ import { showMessageWithCancel } from './messages'
 import { DevSettings } from '../settings'
 import { telemetry } from '../telemetry/telemetry'
 import { Result, ToolId } from '../telemetry/telemetry'
+import { SystemUtilities } from '../systemUtilities'
 const localize = nls.loadMessageBundle()
 
 const msgDownloading = localize('AWS.installProgress.downloading', 'downloading...')
@@ -43,11 +44,11 @@ interface Cli {
     name: string
 }
 
-type AwsClis = Extract<ToolId, 'session-manager-plugin'>
+type AwsClis = Extract<ToolId, 'session-manager-plugin' | 'sam-cli'>
 
 /**
  * CLIs and their full filenames and download paths for their respective OSes
- * TODO: Add SAM? Other CLIs?
+ * TODO: Other CLIs?
  */
 export const awsClis: { [cli in AwsClis]: Cli } = {
     'session-manager-plugin': {
@@ -65,6 +66,20 @@ export const awsClis: { [cli in AwsClis]: Cli } = {
         name: 'Session Manager Plugin',
         manualInstallLink:
             'https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html',
+    },
+    'sam-cli': {
+        command: {
+            windows: path.join('AWSSAMCLI', 'bin', 'sam.cmd'),
+            unix: path.join('sam', 'sam'),
+        },
+        source: {
+            windows: 'https://github.com/aws/aws-sam-cli/releases/latest/download/AWS_SAM_CLI_64_PY3.msi',
+            linux: 'https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip',
+            macos: '',
+        },
+        name: 'AWS SAM CLI',
+        manualInstallLink:
+            'https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html',
     },
 }
 
@@ -90,7 +105,7 @@ export async function installCli(cli: AwsClis, confirm: boolean): Promise<string
             : await vscode.window.showInformationMessage(
                   localize(
                       'AWS.cli.installCliPrompt',
-                      '{0} could not find {1} CLI. Install a local copy?',
+                      '{0} could not find {1}. Install a local copy?',
                       localize('AWS.channel.aws.toolkit', '{0} Toolkit', getIdeProperties().company),
                       cliToInstall.name
                   ),
@@ -107,7 +122,7 @@ export async function installCli(cli: AwsClis, confirm: boolean): Promise<string
 
         const timeout = new Timeout(600000)
         const progress = await showMessageWithCancel(
-            localize('AWS.cli.installProgress', 'Installing: {0} CLI', cliToInstall.name),
+            localize('AWS.cli.installProgress', 'Installing: {0}', cliToInstall.name),
             timeout
         )
 
@@ -117,6 +132,9 @@ export async function installCli(cli: AwsClis, confirm: boolean): Promise<string
             switch (cli) {
                 case 'session-manager-plugin':
                     cliPath = await installSsmCli(tempDir, progress, timeout)
+                    break
+                case 'sam-cli':
+                    cliPath = await installSamCli(tempDir, progress, timeout)
                     break
                 default:
                     throw new InstallerError(`Invalid not found for CLI: ${cli}`)
@@ -141,7 +159,7 @@ export async function installCli(cli: AwsClis, confirm: boolean): Promise<string
 
         vscode.window
             .showErrorMessage(
-                localize('AWS.cli.failedInstall', 'Installation of the {0} CLI failed.', cliToInstall.name),
+                localize('AWS.cli.failedInstall', 'Installation of the {0} failed.', cliToInstall.name),
                 manualInstall
             )
             .then(button => {
@@ -183,7 +201,7 @@ export async function getCliCommand(cli: Cli): Promise<string | undefined> {
  * Returns whether or not a command is accessible on the user's $PATH
  * @param command CLI Command name
  */
-async function hasCliCommand(cli: Cli, global: boolean): Promise<string | undefined> {
+export async function hasCliCommand(cli: Cli, global: boolean): Promise<string | undefined> {
     const command = global ? path.parse(getOsCommand(cli)).base : path.join(getToolkitLocalCliPath(), getOsCommand(cli))
     const result = await new ChildProcess(command, ['--version']).run()
 
@@ -225,8 +243,15 @@ function getToolkitCliDir(): string {
  * Gets the toolkit local CLI path
  * Instantiated as a function instead of a const to prevent being called before `ext.context` is set
  */
-function getToolkitLocalCliPath(): string {
+export function getToolkitLocalCliPath(): string {
+    if (process.platform === 'win32') {
+        return path.join(SystemUtilities.getHomeDirectory(), '.aws', 'toolkit', 'Amazon')
+    }
     return path.join(getToolkitCliDir(), 'Amazon')
+}
+
+export function getToolkitLocalCliCommandPath(cli: AwsClis): string {
+    return path.join(getToolkitLocalCliPath(), getOsCommand(awsClis[cli]))
 }
 
 function handleError<T extends Promise<unknown>>(promise: T): T {
@@ -307,6 +332,69 @@ async function installSsmCli(
         })
 
         return finalPath
+    }
+}
+export async function installSamCli(
+    tempDir: string,
+    progress: vscode.Progress<{ message?: string; increment?: number }>,
+    timeout: Timeout
+): Promise<string> {
+    progress.report({ message: msgDownloading })
+
+    const samInstaller = await downloadCliSource(awsClis['sam-cli'], tempDir, timeout)
+    const outDir =
+        process.platform === 'win32'
+            ? path.join(SystemUtilities.getHomeDirectory(), '.aws', 'toolkit')
+            : path.join(getToolkitLocalCliPath(), 'sam')
+
+    getLogger('channel').info(`Installing AWS SAM CLI from ${samInstaller} to ${outDir}...`)
+    progress.report({ message: msgInstallingLocal })
+
+    return handleError(install())
+
+    async function install() {
+        switch (process.platform) {
+            case 'linux':
+                return installOnLinux()
+            case 'darwin':
+            case 'win32':
+                return installToolkitLocalMsi(samInstaller)
+            default:
+                throw new InvalidPlatformError(
+                    `Platform ${process.platform} is not supported for CLI autoinstallation.`
+                )
+        }
+    }
+
+    async function installOnLinux() {
+        const dirname = path.dirname(samInstaller)
+        new admZip(samInstaller).extractAllTo(dirname, true)
+
+        const result = await new ChildProcess('sh', [
+            path.join(dirname, 'install'),
+            '--update',
+            '--install-dir',
+            outDir,
+            '--bin-dir',
+            outDir,
+        ]).run()
+        if (result.exitCode !== 0) {
+            throw new InstallerError(
+                `Installation of Linux CLI archive ${samInstaller} failed: Error Code ${result.exitCode}`
+            )
+        }
+        await fs.chmod(path.join(outDir, 'dist', 'sam'), 0o755)
+
+        return path.join(getToolkitLocalCliPath(), getOsCommand(awsClis['sam-cli']))
+    }
+
+    async function installToolkitLocalMsi(msiPath: string): Promise<string> {
+        const result = await new ChildProcess('msiexec', ['/a', msiPath, '/quiet', `TARGETDIR=${outDir}`]).run()
+        if (result.exitCode !== 0) {
+            throw new InstallerError(`Installation of MSI file ${msiPath} failed: Error Code ${result.exitCode}`)
+        }
+
+        return path.join(getToolkitLocalCliPath(), getOsCommand(awsClis['sam-cli']))
     }
 }
 

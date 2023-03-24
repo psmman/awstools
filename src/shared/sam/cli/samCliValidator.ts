@@ -9,7 +9,7 @@ import { ClassToInterfaceType } from '../../utilities/tsUtils'
 import { SamCliSettings } from './samCliSettings'
 import { SamCliInfoInvocation, SamCliInfoResponse } from './samCliInfo'
 import { ToolkitError } from '../../errors'
-
+import { getToolkitLocalCliCommandPath } from '../../utilities/cliUtils'
 export const minSamCliVersion = '0.47.0'
 export const minSamCliVersionForImageSupport = '1.13.0'
 export const maxSamCliVersionExclusive = '2.0.0'
@@ -53,6 +53,7 @@ export type SamCliVersionValidatorResult =
 export interface SamCliValidatorResult {
     samCliFound: boolean
     versionValidation?: SamCliVersionValidatorResult
+    isToolkitLocal?: boolean
 }
 
 export interface SamCliValidator {
@@ -77,6 +78,9 @@ export class DefaultSamCliValidator implements SamCliValidator {
         if (sam) {
             result.samCliFound = true
             result.versionValidation = await this.getVersionValidatorResult()
+            if (sam === getToolkitLocalCliCommandPath('sam-cli')) {
+                result.isToolkitLocal = true
+            }
         }
 
         return result

@@ -74,7 +74,7 @@ describe('samCliConfiguration', function () {
             settingsConfiguration
         )
 
-        assert.strictEqual(await config.getOrDetectSamCli().then(r => r.path), undefined)
+        assert.strictEqual(await config.getOrDetectSamCli({ install: false }).then(r => r.path), undefined)
     })
 
     function createSampleFile(filename: string): void {

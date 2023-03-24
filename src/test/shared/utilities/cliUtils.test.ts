@@ -6,6 +6,7 @@
 import * as assert from 'assert'
 import * as fs from 'fs-extra'
 import * as path from 'path'
+import * as os from 'os'
 import { installCli } from '../../../shared/utilities/cliUtils'
 import globals from '../../../shared/extensionGlobals'
 import { ChildProcess } from '../../../shared/utilities/childProcess'
@@ -58,6 +59,36 @@ describe('cliUtils', async function () {
             assertTelemetry({
                 result: 'Cancelled',
                 toolId: 'session-manager-plugin',
+            })
+        })
+
+        it('downloads and installs the SAM CLI automatically', async function () {
+            // sam cli install scoped to just Linux and Windows
+            if (os.platform() === 'darwin') {
+                this.skip()
+            }
+            const samCli = await installCli('sam-cli', false, testWindow)
+            assert.ok(await hasFunctionalCli(samCli))
+            assertTelemetry({
+                result: 'Succeeded',
+                toolId: 'sam-cli',
+            })
+        })
+
+        it('downloads and installs the SAM CLI if prompted and accepted', async function () {
+            // sam cli install scoped to just Linux and Windows
+            if (os.platform() === 'darwin') {
+                this.skip()
+            }
+            const samCli = installCli('sam-cli', true, testWindow)
+            const message = await testWindow.waitForMessage(/Install/)
+            message.assertSeverity(SeverityLevel.Information)
+            message.selectItem('Install')
+
+            assert.ok(await hasFunctionalCli(await samCli))
+            assertTelemetry({
+                result: 'Succeeded',
+                toolId: 'sam-cli',
             })
         })
     })

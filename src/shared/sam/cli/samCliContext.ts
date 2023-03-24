@@ -7,7 +7,15 @@ import { SamCliSettings } from './samCliSettings'
 import { DefaultSamCliProcessInvoker } from './samCliInvoker'
 import { SamCliProcessInvoker } from './samCliInvokerUtils'
 import { throwAndNotifyIfInvalid } from './samCliValidationUtils'
-import { DefaultSamCliValidator, DefaultSamCliValidatorContext, SamCliValidator } from './samCliValidator'
+import {
+    DefaultSamCliValidator,
+    DefaultSamCliValidatorContext,
+    SamCliValidator,
+    SamCliVersionValidation,
+} from './samCliValidator'
+import { installCli } from '../../utilities/cliUtils'
+import { Window } from '../../vscode/window'
+import { isCloud9 } from '../../extensionUtilities'
 
 export interface SamCliContext {
     validator: SamCliValidator
@@ -26,7 +34,16 @@ export function getSamCliContext() {
 }
 
 export async function getSamCliVersion(context: SamCliContext): Promise<string> {
-    const result = await context.validator.detectValidSamCli()
+    let result = await context.validator.detectValidSamCli()
+    if (result.versionValidation?.validation === SamCliVersionValidation.VersionTooLow) {
+        if (result.isToolkitLocal) {
+            await installCli('sam-cli', false, Window.vscode())
+            result = await context.validator.detectValidSamCli()
+        } else if (isCloud9()) {
+            await installCli('sam-cli', true, Window.vscode())
+            result = await context.validator.detectValidSamCli()
+        }
+    }
     throwAndNotifyIfInvalid(result)
 
     return result.versionValidation!.version!
