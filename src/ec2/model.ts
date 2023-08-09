@@ -17,13 +17,14 @@ import {
     ensureDependencies,
     getDeniedSsmActions,
     openRemoteTerminal,
+    promptToAddInlinePolicy,
 } from '../shared/remoteSession'
 import { DefaultIamClient } from '../shared/clients/iamClient'
 import { ErrorInformation } from '../shared/errors'
 import { sshAgentSocketVariable, startSshAgent, startVscodeRemote } from '../shared/extensions/ssh'
 import { createBoundProcess } from '../codecatalyst/model'
 import { getLogger } from '../shared/logger/logger'
-import { Timeout } from '../shared/utilities/timeoutUtils'
+import { CancellationError, Timeout } from '../shared/utilities/timeoutUtils'
 import { showMessageWithCancel } from '../shared/utilities/messages'
 import { VscodeRemoteSshConfig, sshLogFileLocation } from '../shared/vscodeRemoteSshConfig'
 import { SshKeyPair } from './sshKeyPair'
@@ -107,25 +108,25 @@ export class Ec2ConnectionManager {
 
         if (!IamRole) {
             const message = `No IAM role attached to instance: ${selection.instanceId}`
-            this.throwConnectionError(message, selection, { code: 'EC2SSMPermission' })
-        }
-
-        const hasPermission = await this.hasProperPermissions(IamRole!.Arn)
-
-        if (!hasPermission) {
-            const message = `Ensure an IAM role with the proper permissions is attached to the instance. Found attached role: ${
-                IamRole!.Arn
-            }`
             this.throwConnectionError(message, selection, {
                 code: 'EC2SSMPermission',
                 documentationUri: this.policyDocumentationUri,
             })
         }
+
+        const hasPermission = await this.hasProperPermissions(IamRole!.Arn)
+
+        if (!hasPermission) {
+            const policiesAdded = await promptToAddInlinePolicy(this.iamClient, IamRole!.Arn!)
+
+            if (!policiesAdded) {
+                throw new CancellationError('user')
+            }
+        }
     }
 
     private async checkForInstanceSsmError(selection: Ec2Selection): Promise<void> {
         const isSsmAgentRunning = (await this.ssmClient.getInstanceAgentPingStatus(selection.instanceId)) == 'Online'
-
         if (!isSsmAgentRunning) {
             this.throwConnectionError('Is SSM Agent running on the target instance?', selection, {
                 code: 'EC2SSMAgentStatus',
@@ -135,7 +136,7 @@ export class Ec2ConnectionManager {
     }
 
     public throwGeneralConnectionError(selection: Ec2Selection, error: Error) {
-        this.throwConnectionError('Unable to connect to target instance. ', selection, {
+        this.throwConnectionError('', selection, {
             code: 'EC2SSMConnect',
             cause: error,
         })
@@ -153,7 +154,7 @@ export class Ec2ConnectionManager {
         const ssmPlugin = await getOrInstallCli('session-manager-plugin', !isCloud9)
         const shellArgs = [JSON.stringify(session), selection.region, 'StartSession']
         const terminalOptions = {
-            name: selection.region + '/' + selection.instanceId,
+            name: `${selection.region}/${selection.instanceId}`,
             shellPath: ssmPlugin,
             shellArgs: shellArgs,
         }
