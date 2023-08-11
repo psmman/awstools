@@ -35,7 +35,7 @@ export class Ec2InstanceNode extends AWSTreeNodeBase implements AWSResourceNode 
 
     public updateInstance(newInstance: Ec2Instance) {
         this.setInstanceStatus(newInstance.status!)
-        this.label = `${this.name} (${this.InstanceId})`
+        this.label = `${this.name} (${this.InstanceId}) ${this.getStatus().toUpperCase()}`
         this.contextValue = this.getContext()
         this.iconPath = new vscode.ThemeIcon(getIconCode(this.instance))
         this.tooltip = `${this.name}\n${this.InstanceId}\n${this.instance.status}\n${this.arn}`
@@ -46,7 +46,7 @@ export class Ec2InstanceNode extends AWSTreeNodeBase implements AWSResourceNode 
     }
 
     public isPending(): boolean {
-        return this.getStatus() != 'running' && this.getStatus() != 'stopped'
+        return this.getStatus() == 'pending'
     }
 
     public async updateStatus() {
