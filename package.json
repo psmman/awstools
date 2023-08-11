@@ -1121,6 +1121,10 @@
                     "when": "aws.isDevMode"
                 },
                 {
+                    "command": "aws.ec2.linkToLaunchInstance",
+                    "when": "aws.isDevMode"
+                },
+                {
                     "command": "aws.ec2.startInstance",
                     "when": "false"
                 },
@@ -1370,6 +1374,21 @@
                     "command": "aws.ec2.rebootInstance",
                     "group": "0@1",
                     "when": "viewItem =~ /^(awsEc2RunningNode)$/"
+                },
+                {
+                    "command": "aws.ec2.rebootInstance",
+                    "group": "inline@1",
+                    "when": "viewItem =~ /^(awsEc2RunningNode)$/"
+                },
+                {
+                    "command": "aws.ec2.linkToLaunchInstance",
+                    "group": "0@1",
+                    "when": "viewItem == awsEc2ParentNode"
+                },
+                {
+                    "command": "aws.ec2.linkToLaunchInstance",
+                    "group": "inline@1",
+                    "when": "viewItem == awsEc2ParentNode"
                 },
                 {
                     "command": "aws.ecr.createRepository",
@@ -2165,6 +2184,17 @@
                 "command": "aws.ec2.rebootInstance",
                 "title": "%AWS.command.ec2.rebootInstance%",
                 "icon": "$(debug-restart)",
+                "category": "%AWS.title%",
+                "cloud9": {
+                    "cn": {
+                        "category": "%AWS.title.cn%"
+                    }
+                }
+            },
+            {
+                "command": "aws.ec2.linkToLaunchInstance",
+                "title": "%AWS.command.ec2.linkToLaunchInstance%",
+                "icon": "$(add)",
                 "category": "%AWS.title%",
                 "cloud9": {
                     "cn": {
