@@ -14,6 +14,7 @@ import { ExtensionUse } from './utils'
 import { isCloud9 } from '../shared/extensionUtilities'
 import { isInDevEnv } from '../codecatalyst/utils'
 import { showManageConnections } from './ui/vue/show'
+import { CredentialsInjector } from './environment'
 
 export async function initialize(
     extensionContext: vscode.ExtensionContext,
@@ -32,6 +33,12 @@ export async function initialize(
     extensionContext.subscriptions.push(showManageConnections.register(extensionContext))
 
     showManageConnectionsOnStartup()
+
+    if (!isCloud9()) {
+        const injector = new CredentialsInjector(extensionContext.environmentVariableCollection)
+
+        extensionContext.subscriptions.push(injector, vscode.window.registerTerminalProfileProvider('aws', injector))
+    }
 }
 
 /**

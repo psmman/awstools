@@ -374,7 +374,7 @@ export function createConnectionPrompter(auth: Auth, type?: 'iam' | 'sso') {
     async function* loadItems(): AsyncGenerator<
         DataQuickPickItem<Connection | 'addNewConnection' | 'editCredentials'>[]
     > {
-        const connections = auth.listAndTraverseConnections()
+        const connections = auth.listAndTraverseConnections().filter(c => !type || c.type === type)
 
         let hasShownEdit = false
 
