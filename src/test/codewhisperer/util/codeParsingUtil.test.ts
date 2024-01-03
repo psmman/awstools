@@ -10,6 +10,9 @@ import {
     utgLanguageConfigs,
 } from '../../../codewhisperer/util/supplementalContext/codeParsingUtil'
 import assert from 'assert'
+import { createTestWorkspaceFolder, openATextEditorWithText } from '../../testUtil'
+
+let tempFolder: string
 
 describe('RegexValidationForPython', () => {
     it('should extract all function names from a python file content', () => {
@@ -62,51 +65,88 @@ describe('RegexValidationForJava', () => {
 })
 
 describe('isTestFile', () => {
-    it('should return true if the file name matches the test filename pattern - Java', async () => {
-        const filePaths = ['/path/to/MyClassTest.java', '/path/to/TestMyClass.java', '/path/to/MyClassTests.java']
-        const language = 'java'
+    beforeEach(async function () {
+        tempFolder = (await createTestWorkspaceFolder()).uri.fsPath
+    })
 
-        for (const filePath of filePaths) {
-            const result = await isTestFile(filePath, { languageId: language })
-            assert.strictEqual(result, true)
+    it('validate by file path', async function () {
+        const langs = new Map<string, string>([
+            ['java', '.java'],
+            ['python', '.py'],
+            ['typescript', '.py'],
+            ['javascript', '.js'],
+            ['typescriptreact', '.tsx'],
+            ['javascriptreact', '.jsx'],
+        ])
+        const testFilePathsWithoutExt = [
+            '/test/MyClass',
+            '/test/my_class',
+            '/tst/MyClass',
+            '/tst/my_class',
+            '/tests/MyClass',
+            '/tests/my_class',
+        ]
+
+        const srcFilePathsWithoutExt = [
+            '/src/MyClass',
+            'MyClass',
+            'foo/bar/MyClass',
+            'foo/my_class',
+            'my_class',
+            'anyFolderOtherThanTest/foo/myClass',
+        ]
+
+        for (const [languageId, ext] of langs) {
+            const testFilePaths = testFilePathsWithoutExt.map(it => it + ext)
+            for (const testFilePath of testFilePaths) {
+                const actual = await isTestFile(testFilePath, { languageId: languageId })
+                assert.strictEqual(actual, true)
+            }
+
+            const srcFilePaths = srcFilePathsWithoutExt.map(it => it + ext)
+            for (const srcFilePath of srcFilePaths) {
+                const actual = await isTestFile(srcFilePath, { languageId: languageId })
+                assert.strictEqual(actual, false)
+            }
         }
     })
 
-    it('should return false if the file name does not match the test filename pattern - Java', async () => {
-        const filePaths = ['/path/to/MyClass.java', '/path/to/MyClass_test.java', '/path/to/test_MyClass.java']
-        const language = 'java'
-
-        for (const filePath of filePaths) {
-            const result = await isTestFile(filePath, { languageId: language })
-            assert.strictEqual(result, false)
+    async function assertIsTestFile(srcFiles: string[], tstFiles: string[], fileExt: string) {
+        for (const name of tstFiles) {
+            const file = `${name}.${fileExt}`
+            const editor = await openATextEditorWithText('', file, tempFolder, { preview: false })
+            const actual = await isTestFile(editor.document.uri.fsPath, { languageId: editor.document.languageId })
+            assert.strictEqual(actual, true)
         }
-    })
 
-    it('should return true if the file name does not match the test filename pattern - Python', async () => {
-        const filePaths = ['/path/to/util_test.py', '/path/to/test_util.py']
-        const language = 'python'
-
-        for (const filePath of filePaths) {
-            const result = await isTestFile(filePath, { languageId: language })
-            assert.strictEqual(result, true)
+        for (const name of srcFiles) {
+            const file = `${name}.${fileExt}`
+            const editor = await openATextEditorWithText('', file, tempFolder, { preview: false })
+            const actual = await isTestFile(editor.document.uri.fsPath, { languageId: editor.document.languageId })
+            assert.strictEqual(actual, false)
         }
-    })
+    }
 
-    it('should return false if the file name does not match the test filename pattern - Python', async () => {
-        const filePaths = ['/path/to/util.py', '/path/to/utilTest.java', '/path/to/Testutil.java']
-        const language = 'python'
+    it('validate by file name', async function () {
+        const camelCaseSrc = ['Foo', 'Bar', 'Baz']
+        const camelCaseTst = ['FooTest', 'BarTests']
+        await assertIsTestFile(camelCaseSrc, camelCaseTst, 'java')
 
-        for (const filePath of filePaths) {
-            const result = await isTestFile(filePath, { languageId: language })
-            assert.strictEqual(result, false)
-        }
-    })
+        const snakeCaseSrc = ['foo', 'bar']
+        const snakeCaseTst = ['test_foo', 'bar_test']
+        await assertIsTestFile(snakeCaseSrc, snakeCaseTst, 'py')
 
-    it('should return false if the language is not supported', async () => {
-        const filePath = '/path/to/MyClass.cpp'
-        const language = 'c++'
-        const result = await isTestFile(filePath, { languageId: language })
-        assert.strictEqual(result, false)
+        const javascriptTst = ['Foo.test', 'Bar.spec']
+        await assertIsTestFile(camelCaseSrc, javascriptTst, 'js')
+
+        const typescriptTst = javascriptTst
+        await assertIsTestFile(camelCaseSrc, typescriptTst, 'ts')
+
+        const jsxTst = javascriptTst
+        await assertIsTestFile(camelCaseSrc, jsxTst, 'jsx')
+
+        const tsxTst = javascriptTst
+        await assertIsTestFile(camelCaseSrc, tsxTst, 'tsx')
     })
 })
 
