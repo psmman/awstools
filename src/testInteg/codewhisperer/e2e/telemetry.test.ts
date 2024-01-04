@@ -37,6 +37,8 @@ type CodeWhispererResponse = ListRecommendationsResponse & {
 
 let tempFolder: string
 
+// Note: please do not touch anything (change window/focus of cursor) while running the following test cases as these test cases will try to type and accept recoomendation in the current focused editor
+// If tests failed, try re-run withou touching anything first then debug.
 describe('CodeWhisperer telemetry', async function () {
     let sandbox: sinon.SinonSandbox
     let client: DefaultCodeWhispererClient
