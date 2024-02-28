@@ -8,14 +8,13 @@ import * as nls from 'vscode-nls'
 import request from '../common/request'
 import { ApplicationComposer } from './composerWebview'
 import { getLogger } from '../shared/logger'
+import { cdn, localhost } from './constants'
 
 const localize = nls.loadMessageBundle()
 
 // TODO turn this into a flag to make local dev easier
 // Change this to true for local dev
 const isLocalDev = false
-const localhost = 'http://127.0.0.1:3000'
-const cdn = 'https://ide-toolkits.app-composer.aws.dev'
 
 const enabledFeatures = ['ide-only', 'anything-resource', 'sfnV2', 'starling']
 

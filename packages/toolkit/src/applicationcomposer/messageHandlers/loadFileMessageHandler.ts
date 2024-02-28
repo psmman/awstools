@@ -13,9 +13,7 @@ export async function loadFileMessageHandler(request: LoadFileRequestMessage, co
         switch (request.fileName) {
             case '': {
                 // load default template file when 'fileName' is empty
-                const initFileContents = (
-                    await vscode.workspace.fs.readFile(vscode.Uri.file(context.defaultTemplatePath))
-                ).toString()
+                const initFileContents = context.textDocument.getText()
                 if (initFileContents === undefined) {
                     throw new Error(`Cannot read file contents from ${context.defaultTemplatePath}`)
                 }
@@ -32,7 +30,8 @@ export async function loadFileMessageHandler(request: LoadFileRequestMessage, co
             }
             default: {
                 const filePath = path.join(context.workSpacePath, request.fileName)
-                const fileContents = (await vscode.workspace.fs.readFile(vscode.Uri.file(filePath))).toString()
+                const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath))
+                const fileContents = document.getText()
                 loadFileResponseMessage = {
                     messageType: MessageType.RESPONSE,
                     command: Command.LOAD_FILE,
