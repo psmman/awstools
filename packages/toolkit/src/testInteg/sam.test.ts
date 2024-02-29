@@ -119,7 +119,7 @@ const scenarios: TestScenario[] = [
         debugSessionType: 'java',
         language: 'java',
         dependencyManager: 'maven',
-        vscodeMinimum: '1.50.0',
+        vscodeMinimum: '1.80.0',
     },
     {
         runtime: 'java11',
@@ -128,16 +128,25 @@ const scenarios: TestScenario[] = [
         debugSessionType: 'java',
         language: 'java',
         dependencyManager: 'gradle',
-        vscodeMinimum: '1.50.0',
+        vscodeMinimum: '1.80.0',
     },
     {
         runtime: 'java17',
-        displayName: 'java11 (Gradle ZIP)',
+        displayName: 'java17 (Gradle ZIP)',
         path: 'HelloWorldFunction/src/main/java/helloworld/App.java',
         debugSessionType: 'java',
         language: 'java',
         dependencyManager: 'gradle',
-        vscodeMinimum: '1.50.0',
+        vscodeMinimum: '1.80.0',
+    },
+    {
+        runtime: 'java21',
+        displayName: 'java21 (Gradle ZIP)',
+        path: 'HelloWorldFunction/src/main/java/helloworld/App.java',
+        debugSessionType: 'java',
+        language: 'java',
+        dependencyManager: 'gradle',
+        vscodeMinimum: '1.80.0',
     },
     // {
     //     runtime: 'go1.x',
@@ -223,7 +232,7 @@ const scenarios: TestScenario[] = [
         debugSessionType: 'java',
         language: 'java',
         dependencyManager: 'gradle',
-        vscodeMinimum: '1.50.0',
+        vscodeMinimum: '1.80.0',
     },
     {
         runtime: 'java11',
@@ -233,7 +242,7 @@ const scenarios: TestScenario[] = [
         debugSessionType: 'java',
         language: 'java',
         dependencyManager: 'maven',
-        vscodeMinimum: '1.50.0',
+        vscodeMinimum: '1.80.0',
     },
     {
         runtime: 'java17',
@@ -243,7 +252,7 @@ const scenarios: TestScenario[] = [
         debugSessionType: 'java',
         language: 'java',
         dependencyManager: 'maven',
-        vscodeMinimum: '1.50.0',
+        vscodeMinimum: '1.80.0',
     },
     {
         runtime: 'dotnet6',
@@ -447,6 +456,11 @@ describe('SAM Integration Tests', async function () {
     for (let scenarioIndex = 0; scenarioIndex < scenarios.length; scenarioIndex++) {
         const scenario = scenarios[scenarioIndex]
 
+        if (semver.lt(vscode.version, scenario.vscodeMinimum)) {
+            sessionLog.push(`SKIPPED (vscode ${vscode.version} < ${scenario.vscodeMinimum}): ${scenario.displayName}`)
+            continue
+        }
+
         describe(`SAM runtime: ${scenario.displayName}`, async function () {
             let runtimeTestRoot: string
 
@@ -512,10 +526,7 @@ describe('SAM Integration Tests', async function () {
                 })
 
                 it('produces an Add Debug Configuration codelens', async function () {
-                    if (
-                        scenario.language === 'csharp' || // TODO
-                        semver.lt(vscode.version, scenario.vscodeMinimum)
-                    ) {
+                    if (scenario.language === 'csharp' /* TODO */) {
                         this.skip()
                     }
                     const codeLenses = await testUtils.getAddConfigCodeLens(
@@ -562,10 +573,7 @@ describe('SAM Integration Tests', async function () {
                 })
 
                 it('target=api: invokes and attaches on debug request (F5)', async function () {
-                    if (
-                        skipLanguagesOnApi.includes(scenario.language) ||
-                        semver.lt(vscode.version, scenario.vscodeMinimum)
-                    ) {
+                    if (skipLanguagesOnApi.includes(scenario.language)) {
                         this.skip()
                     }
 
@@ -579,10 +587,6 @@ describe('SAM Integration Tests', async function () {
                 })
 
                 it('target=template: invokes and attaches on debug request (F5)', async function () {
-                    if (semver.lt(vscode.version, scenario.vscodeMinimum)) {
-                        this.skip()
-                    }
-
                     await testTarget('template')
                 })
 
