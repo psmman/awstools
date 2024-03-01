@@ -13,6 +13,35 @@ import {
 } from '../types'
 import vscode from 'vscode'
 
+import { templateShouldBeUpdated } from '../util'
+import { bufferTimeMs } from '../constants'
+
+let timeSinceLastChange = 0
+
+function bufferTextDocumentChange(event: vscode.TextDocumentChangeEvent, context: WebviewContext) {
+    timeSinceLastChange = Date.now()
+    setTimeout(async () => {
+        if (Date.now() - timeSinceLastChange < bufferTimeMs) {
+            return
+        }
+
+        const fileContents = event.document.getText()
+        const filePath = context.defaultTemplatePath
+        const fileName = context.defaultTemplateName
+
+        if (await templateShouldBeUpdated(context.fileWatches[filePath].fileContents, fileContents)) {
+            context.fileWatches[filePath] = { fileContents: fileContents }
+            const fileChangedMessage: FileChangedMessage = {
+                messageType: MessageType.BROADCAST,
+                command: Command.FILE_CHANGED,
+                fileName: fileName,
+                fileContents: fileContents,
+            }
+            await context.panel.webview.postMessage(fileChangedMessage)
+        }
+    }, bufferTimeMs)
+}
+
 export async function addFileWatchMessageHandler(request: AddFileWatchRequestMessage, context: WebviewContext) {
     let addFileWatchResponseMessage: AddFileWatchResponseMessage
     try {
@@ -20,24 +49,11 @@ export async function addFileWatchMessageHandler(request: AddFileWatchRequestMes
         if (context.defaultTemplateName !== request.fileName) {
             throw new Error('file watching is only allowed on default template file')
         }
-        const filePath = context.defaultTemplatePath
-        const fileName = context.defaultTemplateName
-        const fileWatch = vscode.workspace.createFileSystemWatcher(filePath)
-        context.disposables.push(fileWatch)
-
-        fileWatch.onDidChange(async () => {
-            const fileContents = (await vscode.workspace.fs.readFile(vscode.Uri.file(filePath))).toString()
-            if (fileContents !== context.fileWatches[filePath].fileContents) {
-                const fileChangedMessage: FileChangedMessage = {
-                    messageType: MessageType.BROADCAST,
-                    command: Command.FILE_CHANGED,
-                    fileName: fileName,
-                    fileContents: fileContents,
-                }
-
-                await context.panel.webview.postMessage(fileChangedMessage)
-                context.fileWatches[filePath] = { fileContents: fileContents }
+        vscode.workspace.onDidChangeTextDocument(async event => {
+            if (event.document.fileName !== context.textDocument.fileName || event.contentChanges.length === 0) {
+                return
             }
+            bufferTextDocumentChange(event, context)
         })
 
         addFileWatchResponseMessage = {
