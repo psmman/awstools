@@ -13,7 +13,7 @@ export async function saveFileMessageHandler(request: SaveFileRequestMessage, co
     async function updateTextDocument(existingTemplate: string, fileUri: vscode.Uri) {
         if (await templateShouldBeUpdated(existingTemplate, request.fileContents)) {
             const edit = new vscode.WorkspaceEdit()
-            edit.replace(fileUri, new vscode.Range(0, 0, context.textDocument.lineCount, 0), request.fileContents)
+            edit.replace(fileUri, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), request.fileContents)
             await vscode.workspace.applyEdit(edit)
         }
     }
