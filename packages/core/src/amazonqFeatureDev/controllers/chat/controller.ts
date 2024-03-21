@@ -11,7 +11,12 @@ import { EventEmitter } from 'vscode'
 import { telemetry } from '../../../shared/telemetry/telemetry'
 import { createSingleFileDialog } from '../../../shared/ui/common/openDialog'
 import { featureDevScheme } from '../../constants'
-import { ContentLengthError, SelectedFolderNotInWorkspaceFolderError, createUserFacingErrorMessage } from '../../errors'
+import {
+    ContentLengthError,
+    InvalidCodeGenStateError,
+    SelectedFolderNotInWorkspaceFolderError,
+    createUserFacingErrorMessage,
+} from '../../errors'
 import { defaultRetryLimit } from '../../limits'
 import { Session } from '../../session/session'
 import { featureName } from '../../constants'
@@ -27,6 +32,7 @@ import { EditorContentController } from '../../../amazonq/commons/controllers/co
 import { openUrl } from '../../../shared/utilities/vsCodeUtils'
 import { getPathsFromZipFilePath, getWorkspaceFoldersByPrefixes } from '../../util/files'
 import { examples, newTaskChanges, approachCreation, sessionClosed, updateCode } from '../../userFacingText'
+import { ToolkitError } from '../../../shared/errors'
 
 export interface ChatControllerEventEmitters {
     readonly processHumanChatMessage: EventEmitter<any>
@@ -144,7 +150,7 @@ export class FeatureDevController {
         })
     }
 
-    private async processChatItemVotedMessage(tabId: string, messageId: string, vote: string) {
+    private async processChatItemVotedMessage(tabId: string, _messageId: string, vote: string) {
         const session = await this.sessionStorage.getSession(tabId)
 
         switch (session?.state.phase) {
@@ -300,6 +306,29 @@ export class FeatureDevController {
         this.messenger.sendAsyncEventProgress(tabID, false, undefined)
     }
 
+    private printFailedCodeGenMessage(session: Session, message: string, tabID: string, retryable: boolean) {
+        this.messenger.sendAnswer({
+            message: message,
+            type: 'answer',
+            tabID: tabID,
+        })
+
+        this.messenger.sendAnswer({
+            type: 'system-prompt',
+            tabID: tabID,
+            followUps:
+                retryable && this.retriesRemaining(session) > 0
+                    ? [
+                          {
+                              pillText: 'Retry',
+                              type: FollowUpTypes.Retry,
+                              status: 'warning',
+                          },
+                      ]
+                    : [],
+        })
+    }
+
     /**
      * Handle a regular incoming message when a user is in the code generation phase
      */
@@ -310,6 +339,7 @@ export class FeatureDevController {
             true,
             `This may take a few minutes. I will send a notification when it's complete if you navigate away from this panel, but please keep the tab open.`
         )
+        let enableInput = false
 
         try {
             this.messenger.sendAnswer({
@@ -319,30 +349,27 @@ export class FeatureDevController {
             })
             this.messenger.sendUpdatePlaceholder(tabID, 'Generating code ...')
             await session.send(message)
-            const filePaths = session.state.filePaths ?? []
-            const deletedFiles = session.state.deletedFiles ?? []
+
+            if (session.state.codeGenerationResult?.result === 'pending') {
+                throw new ToolkitError('Unexpected state in code generation')
+            }
+            if (session.state.codeGenerationResult?.result === 'failed') {
+                // enable the input if the error is not retryable.
+                // we're expecting a new prompt in this case
+                enableInput = !session.state.codeGenerationResult.retryable
+                this.printFailedCodeGenMessage(
+                    session,
+                    session.state.codeGenerationResult.message,
+                    tabID,
+                    session.state.codeGenerationResult.retryable
+                )
+                return
+            }
+
+            const filePaths = session.state.codeGenerationResult?.artifacts.filePaths ?? []
+            const deletedFiles = session.state.codeGenerationResult?.artifacts.deletedFiles ?? []
             if (filePaths.length === 0 && deletedFiles.length === 0) {
-                this.messenger.sendAnswer({
-                    message: 'Unable to generate any file changes',
-                    type: 'answer',
-                    tabID: tabID,
-                })
-                this.messenger.sendAnswer({
-                    type: 'system-prompt',
-                    tabID: tabID,
-                    followUps:
-                        this.retriesRemaining(session) > 0
-                            ? [
-                                  {
-                                      pillText: 'Retry',
-                                      type: FollowUpTypes.Retry,
-                                      status: 'warning',
-                                  },
-                              ]
-                            : [],
-                })
-                // Lock the chat input until they explicitly click retry
-                this.messenger.sendChatInputEnabled(tabID, false)
+                this.printFailedCodeGenMessage(session, 'Unable to generate any file changes', tabID, true)
                 return
             }
 
@@ -354,7 +381,7 @@ export class FeatureDevController {
             this.messenger.sendCodeResult(
                 filePaths,
                 deletedFiles,
-                session.state.references ?? [],
+                session.state.codeGenerationResult?.artifacts.references ?? [],
                 tabID,
                 session.uploadId
             )
@@ -364,13 +391,15 @@ export class FeatureDevController {
                 followUps: this.getFollowUpOptions(session?.state.phase),
                 tabID: tabID,
             })
-            this.messenger.sendUpdatePlaceholder(tabID, 'Select an option above to proceed')
         } finally {
             // Finish processing the event
             this.messenger.sendAsyncEventProgress(tabID, false, undefined)
-
-            // Lock the chat input until they explicitly click one of the follow ups
-            this.messenger.sendChatInputEnabled(tabID, false)
+            this.messenger.sendChatInputEnabled(tabID, enableInput)
+            if (enableInput) {
+                this.messenger.sendUpdatePlaceholder(tabID, 'How can this plan be improved?')
+            } else {
+                this.messenger.sendUpdatePlaceholder(tabID, 'Select an option above to proceed')
+            }
 
             if (!this.isAmazonQVisible) {
                 const open = 'Open chat'
@@ -411,9 +440,13 @@ export class FeatureDevController {
         let session
         try {
             session = await this.sessionStorage.getSession(message.tabID)
+            if (session.state.codeGenerationResult?.result !== 'success') {
+                throw new InvalidCodeGenStateError()
+            }
             telemetry.amazonq_isAcceptedCodeChanges.emit({
                 amazonqConversationId: session.conversationId,
-                amazonqNumberOfFilesAccepted: session.state.filePaths?.filter(i => !i.rejected).length ?? -1,
+                amazonqNumberOfFilesAccepted:
+                    session.state.codeGenerationResult.artifacts.filePaths?.filter(i => !i.rejected).length ?? -1,
                 enabled: true,
                 result: 'Succeeded',
             })
@@ -617,19 +650,29 @@ export class FeatureDevController {
         const filePathToUpdate: string = message.filePath
 
         const session = await this.sessionStorage.getSession(tabId)
-        const filePathIndex = (session.state.filePaths ?? []).findIndex(obj => obj.relativePath === filePathToUpdate)
-        if (filePathIndex !== -1 && session.state.filePaths) {
-            session.state.filePaths[filePathIndex].rejected = !session.state.filePaths[filePathIndex].rejected
+        if (session.state.codeGenerationResult?.result !== 'success') {
+            throw new InvalidCodeGenStateError()
         }
-        const deletedFilePathIndex = (session.state.deletedFiles ?? []).findIndex(
+        const filePathIndex = (session.state.codeGenerationResult.artifacts.filePaths ?? []).findIndex(
             obj => obj.relativePath === filePathToUpdate
         )
-        if (deletedFilePathIndex !== -1 && session.state.deletedFiles) {
-            session.state.deletedFiles[deletedFilePathIndex].rejected =
-                !session.state.deletedFiles[deletedFilePathIndex].rejected
+        if (filePathIndex !== -1 && session.state.codeGenerationResult.artifacts.filePaths) {
+            session.state.codeGenerationResult.artifacts.filePaths[filePathIndex].rejected =
+                !session.state.codeGenerationResult.artifacts.filePaths[filePathIndex].rejected
+        }
+        const deletedFilePathIndex = (session.state.codeGenerationResult.artifacts.deletedFiles ?? []).findIndex(
+            obj => obj.relativePath === filePathToUpdate
+        )
+        if (deletedFilePathIndex !== -1 && session.state.codeGenerationResult.artifacts.deletedFiles) {
+            session.state.codeGenerationResult.artifacts.deletedFiles[deletedFilePathIndex].rejected =
+                !session.state.codeGenerationResult.artifacts.deletedFiles[deletedFilePathIndex].rejected
         }
 
-        await session.updateFilesPaths(tabId, session.state.filePaths ?? [], session.state.deletedFiles ?? [])
+        await session.updateFilesPaths(
+            tabId,
+            session.state.codeGenerationResult.artifacts.filePaths ?? [],
+            session.state.codeGenerationResult.artifacts.deletedFiles ?? []
+        )
     }
 
     private async openDiff(message: OpenDiffMessage) {
