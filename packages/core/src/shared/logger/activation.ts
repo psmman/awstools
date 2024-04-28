@@ -67,7 +67,7 @@ export async function activate(
         'debugConsole'
     )
 
-    getLogger().debug(`Logging started: ${logUri}`)
+    getLogger().debug(`Logging started: ${logUri ?? '(no file)'}`)
 
     const commands = new Logging(logUri, mainLogger)
     extensionContext.subscriptions.push(...Object.values(Logging.declared).map(c => c.register(commands)))
