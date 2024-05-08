@@ -17,6 +17,8 @@ import { listCodeWhispererCommandsWalkthrough } from '../codewhisperer/ui/status
 import { Commands } from '../shared/vscode/commands2'
 import { focusAmazonQPanel, focusAmazonQPanelKeybinding } from '../codewhispererChat/commands/registerCommands'
 import { TryChatCodeLensProvider, tryChatCodeLensCommand } from '../codewhispererChat/editor/codelens'
+import { CodeSuggestionsState } from '../codewhisperer'
+import { CodeScansState } from '../codewhisperer/models/model'
 
 export async function activate(context: ExtensionContext) {
     const appInitContext = DefaultAmazonQAppInitContext.instance
@@ -49,6 +51,12 @@ export async function activate(context: ExtensionContext) {
     Commands.register('aws.amazonq.learnMore', () => {
         void vscode.env.openExternal(vscode.Uri.parse(amazonQHelpUrl))
     })
+
+    const isSuggestionsEnabled = CodeSuggestionsState.instance.isSuggestionsEnabled()
+    await vscode.commands.executeCommand('setContext', 'aws.codewhisperer.isSuggestionsEnabled', isSuggestionsEnabled)
+
+    const isScansEnabled = CodeScansState.instance.isScansEnabled()
+    await vscode.commands.executeCommand('setContext', 'aws.codewhisperer.isScanEnabled', isScansEnabled)
 
     await activateBadge()
 }

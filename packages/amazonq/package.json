@@ -219,10 +219,6 @@
         "menus": {
             "commandPalette": [
                 {
-                    "command": "aws.amazonq.signout",
-                    "when": "false"
-                },
-                {
                     "command": "aws.amazonq.reconnect",
                     "when": "false"
                 },
@@ -243,20 +239,12 @@
                     "when": "false"
                 },
                 {
-                    "command": "aws.amazonq.auth.help",
-                    "when": "false"
-                },
-                {
                     "command": "aws.amazonq.auth.manageConnections",
                     "when": "false"
                 },
                 {
                     "command": "amazonq.dev.openMenu",
                     "when": "aws.isDevMode || isCloud9"
-                },
-                {
-                    "command": "aws.amazonq.learnMore",
-                    "when": "false"
                 }
             ],
             "view/title": [
@@ -474,6 +462,11 @@
                 "category": "%AWS.amazonq.title%"
             },
             {
+                "command": "aws.amazonq.openReferencePanelFromCommandPalette",
+                "title": "%AWS.command.codewhisperer.openReferencePanel%",
+                "category": "%AWS.amazonq.title%"
+            },
+            {
                 "command": "aws.amazonq.transformationHub.reviewChanges.acceptChanges",
                 "title": "%AWS.command.q.transform.acceptChanges%"
             },
@@ -614,6 +607,45 @@
                 "command": "aws.amazonq.showHistoryInHub",
                 "title": "Show Job Status",
                 "icon": "$(history)"
+            },
+            {
+                "command": "aws.amazonq.selectCustomization",
+                "title": "%AWS.codewhisperer.customization.notification.new_customizations.select%",
+                "category": "%AWS.amazonq.title%"
+            },
+            {
+                "command": "aws.amazonq.gettingStarted",
+                "title": "Try inline suggestion examples",
+                "category": "%AWS.amazonq.title%"
+            },
+            {
+                "command": "aws.amazonq.openChatPanelFromCommandPalette",
+                "title": "Open Chat Panel",
+                "category": "%AWS.amazonq.title%"
+            },
+            {
+                "command": "aws.amazonq.resumeAutoSuggestions",
+                "title": "%AWS.amazonq.resumeAutoSuggestions%",
+                "category": "%AWS.amazonq.title%",
+                "enablement": "!aws.codewhisperer.isSuggestionsEnabled"
+            },
+            {
+                "command": "aws.amazonq.pauseAutoSuggestions",
+                "title": "%AWS.amazonq.pauseAutoSuggestions%",
+                "category": "%AWS.amazonq.title%",
+                "enablement": "aws.codewhisperer.isSuggestionsEnabled"
+            },
+            {
+                "command": "aws.amazonq.resumeAutoScans",
+                "title": "%AWS.amazonq.resumeAutoScans%",
+                "category": "%AWS.amazonq.title%",
+                "enablement": "!aws.codewhisperer.isScanEnabled"
+            },
+            {
+                "command": "aws.amazonq.pauseAutoScans",
+                "title": "%AWS.amazonq.pauseAutoScans%",
+                "category": "%AWS.amazonq.title%",
+                "enablement": "aws.codewhisperer.isScanEnabled"
             }
         ],
         "keybindings": [
