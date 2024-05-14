@@ -42,6 +42,13 @@ import {
     fetchFeatureConfigsCmd,
     toggleCodeScans,
     registerToolkitApiCallback,
+    openChatPanel,
+    pauseAutoSuggestions,
+    resumeAutoSuggestions,
+    pauseAutoScans,
+    resumeAutoScans,
+    openChatPanelFromCommandPalette,
+    showReferenceLogFromCommandPalette,
 } from './commands/basicCommands'
 import { sleep } from '../shared/utilities/timeoutUtils'
 import { ReferenceLogViewProvider } from './service/referenceLogViewProvider'
@@ -270,6 +277,7 @@ export async function activate(context: ExtContext): Promise<void> {
         ),
         vscode.window.registerWebviewViewProvider(ReferenceLogViewProvider.viewType, ReferenceLogViewProvider.instance),
         showReferenceLog.register(),
+        showReferenceLogFromCommandPalette.register(),
         vscode.languages.registerCodeLensProvider(
             [...CodeWhispererConstants.platformLanguageIds],
             ReferenceInlineProvider.instance
@@ -286,7 +294,13 @@ export async function activate(context: ExtContext): Promise<void> {
             [...CodeWhispererConstants.platformLanguageIds],
             SecurityIssueCodeActionProvider.instance
         ),
-        vscode.commands.registerCommand('aws.amazonq.openEditorAtRange', openEditorAtRange)
+        vscode.commands.registerCommand('aws.amazonq.openEditorAtRange', openEditorAtRange),
+        openChatPanel.register(),
+        openChatPanelFromCommandPalette.register(),
+        pauseAutoSuggestions.register(),
+        resumeAutoSuggestions.register(),
+        pauseAutoScans.register(),
+        resumeAutoScans.register()
     )
 
     await auth.restore()

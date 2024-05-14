@@ -28,7 +28,7 @@ import {
 import { applyPatch } from 'diff'
 import { closeSecurityIssueWebview, showSecurityIssueWebview } from '../views/securityIssue/securityIssueWebview'
 import { Mutable } from '../../shared/utilities/tsUtils'
-import { CodeWhispererSource } from './types'
+import { CodeWhispererSource, commandPalette } from './types'
 import { FeatureConfigProvider } from '../service/featureConfigProvider'
 import { TelemetryHelper } from '../util/telemetryHelper'
 import { Auth, AwsConnection } from '../../auth'
@@ -51,6 +51,12 @@ export const toggleCodeSuggestions = Commands.declare(
             })
 
             const isSuggestionsEnabled = await suggestionState.toggleSuggestions()
+            await vscode.commands.executeCommand(
+                'setContext',
+                'aws.codewhisperer.isSuggestionsEnabled',
+                isSuggestionsEnabled
+            )
+
             span.record({
                 settingState: isSuggestionsEnabled
                     ? CodeWhispererConstants.autoSuggestionConfig.activated
@@ -84,13 +90,15 @@ export const toggleCodeScans = Commands.declare(
             })
 
             const isScansEnabled = await scansState.toggleScans()
+            await vscode.commands.executeCommand('setContext', 'aws.codewhisperer.isScanEnabled', isScansEnabled)
+
             span.record({
                 settingState: isScansEnabled
                     ? CodeWhispererConstants.autoScansConfig.activated
                     : CodeWhispererConstants.autoScansConfig.deactivated,
             })
 
-            await vscode.commands.executeCommand('aws.codeWhisperer.refreshStatusBar')
+            await vscode.commands.executeCommand('aws.amazonq.refreshStatusBar')
         })
     }
 )
@@ -102,6 +110,60 @@ export const showReferenceLog = Commands.declare(
             source = 'ellipsesMenu'
         }
         await vscode.commands.executeCommand('workbench.view.extension.aws-codewhisperer-reference-log')
+    }
+)
+export const showReferenceLogFromCommandPalette = Commands.declare(
+    { id: 'aws.amazonq.openReferencePanelFromCommandPalette' },
+    () => async (_: VsCodeCommandArg, source: CodeWhispererSource) => {
+        return showReferenceLog.execute(placeholder, commandPalette)
+    }
+)
+
+export const openChatPanel = Commands.declare(
+    { id: 'aws.amazonq.openChatPanel', compositeKey: { 1: 'source' } },
+    () => async (_: VsCodeCommandArg, source: CodeWhispererSource) => {
+        if (_ !== placeholder) {
+            source = 'ellipsesMenu'
+        }
+        await vscode.commands.executeCommand('aws.amazonq.focusChat')
+    }
+)
+
+export const openChatPanelFromCommandPalette = Commands.declare(
+    { id: 'aws.amazonq.openChatPanelFromCommandPalette' },
+    () => async (_: VsCodeCommandArg, source: CodeWhispererSource) => {
+        if (_ !== placeholder) {
+            source = commandPalette
+        }
+        return openChatPanel.execute(placeholder, source)
+    }
+)
+
+export const pauseAutoSuggestions = Commands.declare(
+    { id: 'aws.amazonq.pauseAutoSuggestions' },
+    () => async (_: VsCodeCommandArg, source: CodeWhispererSource) => {
+        return toggleCodeSuggestions.execute(placeholder, commandPalette)
+    }
+)
+
+export const resumeAutoSuggestions = Commands.declare(
+    { id: 'aws.amazonq.resumeAutoSuggestions' },
+    () => async (_: VsCodeCommandArg, source: CodeWhispererSource) => {
+        return toggleCodeSuggestions.execute(placeholder, commandPalette)
+    }
+)
+
+export const pauseAutoScans = Commands.declare(
+    { id: 'aws.amazonq.pauseAutoScans' },
+    () => async (_: VsCodeCommandArg, source: CodeWhispererSource) => {
+        return toggleCodeScans.execute(placeholder, commandPalette)
+    }
+)
+
+export const resumeAutoScans = Commands.declare(
+    { id: 'aws.amazonq.resumeAutoScans' },
+    () => async (_: VsCodeCommandArg, source: CodeWhispererSource) => {
+        return toggleCodeScans.execute(placeholder, commandPalette)
     }
 )
 
