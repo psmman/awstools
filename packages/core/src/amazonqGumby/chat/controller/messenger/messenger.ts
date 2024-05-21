@@ -34,6 +34,7 @@ export type StaticTextResponseType =
     | 'java-home-not-set'
     | 'start-transformation-confirmed'
     | 'job-transmitted'
+    | 'invalid-java-home-provided'
     | 'end-HIL-early'
 
 export type UnrecoverableErrorType =
@@ -201,9 +202,22 @@ export class Messenger {
         this.dispatcher.sendAsyncEventProgress(new AsyncEventProgressMessage(tabID, { inProgress, message, messageId }))
     }
 
+    public sendInvalidJavaHomeProvidedMessage(tabID: string, expectedJdkVersion: string) {
+        this.dispatcher.sendChatMessage(
+            new ChatMessage(
+                {
+                    message: MessengerUtils.createInvalidJavaHomePromptChatMessage(expectedJdkVersion),
+                    messageType: 'ai-prompt',
+                },
+                tabID
+            )
+        )
+    }
+
     public sendCompilationInProgress(tabID: string) {
         const message = CodeWhispererConstants.buildStartedChatMessage
 
+        // Mynah UI requires us sending `message: undefined` before passing the `message` for animation to work
         this.dispatcher.sendAsyncEventProgress(
             new AsyncEventProgressMessage(tabID, { inProgress: true, message: undefined })
         )
@@ -409,6 +423,7 @@ export class Messenger {
     }
 
     public sendTransformationIntroduction(tabID: string) {
+        // Mynah UI requires us sending `message: undefined` before passing the `message` for animation to work
         this.dispatcher.sendAsyncEventProgress(
             new AsyncEventProgressMessage(tabID, { inProgress: true, message: undefined })
         )

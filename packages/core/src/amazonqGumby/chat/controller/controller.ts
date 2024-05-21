@@ -44,6 +44,7 @@ import { telemetry } from '../../../shared/telemetry/telemetry'
 import { MetadataResult } from '../../../shared/telemetry/telemetryClient'
 import { CodeTransformTelemetryState } from '../../telemetry/codeTransformTelemetryState'
 import { getAuthType } from '../../../codewhisperer/service/transformByQ/transformApiHandler'
+import { getJavaVersionStringUsedByMaven } from '../../../codewhisperer/service/transformByQ/transformMavenHandler'
 import DependencyVersions from '../../models/dependencies'
 
 // These events can be interactions within the chat,
@@ -68,7 +69,7 @@ export class GumbyController {
     private readonly messenger: Messenger
     private readonly sessionStorage: ChatSessionManager
     private authController: AuthController
-
+    private readonly MaximumJavaHomeRetries = 3
     public constructor(
         private readonly chatControllerMessageListeners: ChatControllerEventEmitters,
         messenger: Messenger,
@@ -299,13 +300,6 @@ export class GumbyController {
     }
 
     private async prepareProjectForSubmission(message: { pathToJavaHome: string; tabID: string }): Promise<void> {
-        if (message.pathToJavaHome) {
-            transformByQState.setJavaHome(message.pathToJavaHome)
-            getLogger().info(
-                `CodeTransformation: using JAVA_HOME = ${transformByQState.getJavaHome()} since source JDK does not match Maven JDK`
-            )
-        }
-
         try {
             this.sessionStorage.getSession().conversationState = ConversationState.COMPILING
             this.messenger.sendCompilationInProgress(message.tabID)
@@ -389,6 +383,39 @@ export class GumbyController {
                 const pathToJavaHome = extractPath(data.message)
 
                 if (pathToJavaHome) {
+                    transformByQState.setJavaHome(pathToJavaHome)
+                    getLogger().info(
+                        `CodeTransformation: using JAVA_HOME = ${transformByQState.getJavaHome()} since source JDK does not match Maven JDK`
+                    )
+
+                    try {
+                        await validateCanCompileProject()
+                    } catch (err: any) {
+                        if (err instanceof JavaHomeNotSetError) {
+                            const providedJdkVersion =
+                                (await getJavaVersionStringUsedByMaven()) ?? JDKVersion.UNSUPPORTED
+                            const expectedJdkVersion = transformByQState.getSourceJDKVersion() ?? JDKVersion.UNSUPPORTED
+                            getLogger().warn(
+                                `CodeTransformation: non matching JAVA_HOME provided: ${providedJdkVersion} expected: ${expectedJdkVersion} JDK release must match`
+                            )
+                            if (transformByQState.incrementAndGetJavaHomeAttempts() > this.MaximumJavaHomeRetries) {
+                                transformByQState.resetJavaHomeAttempts()
+                                transformByQState.resetJavaHome()
+                                this.messenger.sendUnrecoverableErrorResponse('invalid-java-home', data.tabID)
+                                return
+                            }
+                            this.sessionStorage.getSession().conversationState = ConversationState.PROMPT_JAVA_HOME
+                            this.messenger.sendInvalidJavaHomeProvidedMessage(data.tabID, expectedJdkVersion)
+                            this.messenger.sendUpdatePlaceholder(
+                                data.tabID,
+                                MessengerUtils.createInvalidJavaHomePlaceholder(expectedJdkVersion)
+                            )
+                            this.messenger.sendChatInputEnabled(data.tabID, true)
+                            return
+                        }
+                        throw err
+                    }
+
                     await this.prepareProjectForSubmission({
                         pathToJavaHome,
                         tabID: data.tabID,

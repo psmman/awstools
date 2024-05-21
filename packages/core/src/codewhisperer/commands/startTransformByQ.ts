@@ -39,6 +39,7 @@ import { getOpenProjects, validateOpenProjects } from '../service/transformByQ/t
 import {
     getVersionData,
     prepareProjectDependencies,
+    getJavaVersionUsedByMaven,
     runMavenDependencyUpdateCommands,
 } from '../service/transformByQ/transformMavenHandler'
 import {
@@ -106,16 +107,7 @@ async function setMaven() {
 }
 
 async function validateJavaHome(): Promise<boolean> {
-    const versionData = await getVersionData()
-    let javaVersionUsedByMaven = versionData[1]
-    if (javaVersionUsedByMaven !== undefined) {
-        javaVersionUsedByMaven = javaVersionUsedByMaven.slice(0, 3)
-        if (javaVersionUsedByMaven === '1.8') {
-            javaVersionUsedByMaven = JDKVersion.JDK8
-        } else if (javaVersionUsedByMaven === '11.') {
-            javaVersionUsedByMaven = JDKVersion.JDK11
-        }
-    }
+    const javaVersionUsedByMaven = await getJavaVersionUsedByMaven()
     if (javaVersionUsedByMaven !== transformByQState.getSourceJDKVersion()) {
         telemetry.codeTransform_isDoubleClickedToTriggerInvalidProject.emit({
             codeTransformSessionId: CodeTransformTelemetryState.instance.getSessionId(),
@@ -640,8 +632,8 @@ export async function postTransformationJob() {
     const resultStatusMessage = transformByQState.getStatus()
 
     const versionInfo = await getVersionData()
-    const mavenVersionInfoMessage = `${versionInfo[0]} (${transformByQState.getMavenName()})`
-    const javaVersionInfoMessage = `${versionInfo[1]} (${transformByQState.getMavenName()})`
+    const mavenVersionInfoMessage = `${versionInfo.mavenVersion} (${transformByQState.getMavenName()})`
+    const javaVersionInfoMessage = `${versionInfo.javaVersion} (${transformByQState.getMavenName()})`
 
     // Note: IntelliJ implementation of ResultStatusMessage includes additional metadata such as jobId.
     telemetry.codeTransform_totalRunTime.emit({

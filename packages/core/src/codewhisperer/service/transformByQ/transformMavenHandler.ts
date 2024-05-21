@@ -3,16 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import * as vscode from 'vscode'
-import { FolderInfo, transformByQState } from '../../models/model'
+import { FolderInfo, transformByQState, JDKVersion } from '../../models/model'
 import { getLogger } from '../../../shared/logger'
 import * as CodeWhispererConstants from '../../models/constants'
-import { spawnSync } from 'child_process' // Consider using ChildProcess once we finalize all spawnSync calls
+import { spawnSync, SpawnSyncOptionsWithStringEncoding } from 'child_process' // Consider using ChildProcess once we finalize all spawnSync calls
 import { CodeTransformMavenBuildCommand, telemetry } from '../../../shared/telemetry/telemetry'
 import { CodeTransformTelemetryState } from '../../../amazonqGumby/telemetry/codeTransformTelemetryState'
 import { MetadataResult } from '../../../shared/telemetry/telemetryClient'
 import { ToolkitError } from '../../../shared/errors'
 import { writeLogs } from './transformFileHandler'
 import { throwIfCancelled } from './transformApiHandler'
+
+interface MavenVersionData {
+    mavenVersion: string | undefined
+    javaVersion: string | undefined
+}
 
 // run 'install' with either 'mvnw.cmd', './mvnw', or 'mvn' (if wrapper exists, we use that, otherwise we use regular 'mvn')
 function installProjectDependencies(dependenciesFolder: FolderInfo, modulePath: string) {
@@ -174,11 +179,37 @@ export async function prepareProjectDependencies(dependenciesFolder: FolderInfo,
     void vscode.window.showInformationMessage(CodeWhispererConstants.buildSucceededNotification)
 }
 
-export async function getVersionData() {
+export async function getJavaVersionStringUsedByMaven() {
+    const versionData = await getVersionData()
+    return versionData.javaVersion?.slice(0, 3)
+}
+
+export async function getJavaVersionUsedByMaven() {
+    const javaVersion = await getJavaVersionStringUsedByMaven()
+    switch (javaVersion) {
+        case '1.8':
+            return JDKVersion.JDK8
+        case '11.':
+            return JDKVersion.JDK11
+        default:
+            return JDKVersion.UNSUPPORTED
+    }
+}
+
+export async function getVersionData(): Promise<MavenVersionData> {
     const baseCommand = transformByQState.getMavenName() // will be one of: 'mvnw.cmd', './mvnw', 'mvn'
     const modulePath = transformByQState.getProjectPath()
+    const javaHome = transformByQState.getJavaHome() // If customer provided JAVA_HOME use that
+
     const args = ['-v']
-    const spawnResult = spawnSync(baseCommand, args, { cwd: modulePath, shell: true, encoding: 'utf-8' })
+    let env = process.env
+    if (javaHome) {
+        getLogger().info(`CodeTransformation: using customer provided JAVA_HOME = ${javaHome}`)
+        env = { ...env, JAVA_HOME: javaHome }
+    }
+
+    const options: SpawnSyncOptionsWithStringEncoding = { cwd: modulePath, shell: true, encoding: 'utf-8', env: env }
+    const spawnResult = spawnSync(baseCommand, args, options)
 
     let localMavenVersion: string | undefined = ''
     let localJavaVersion: string | undefined = ''
@@ -202,7 +233,7 @@ export async function getVersionData() {
     getLogger().info(
         `CodeTransformation: Ran ${baseCommand} to get Maven version = ${localMavenVersion} and Java version = ${localJavaVersion} with project JDK = ${transformByQState.getSourceJDKVersion()}`
     )
-    return [localMavenVersion, localJavaVersion]
+    return { mavenVersion: localMavenVersion, javaVersion: localJavaVersion }
 }
 
 // run maven 'versions:dependency-updates-aggregate-report' with either 'mvnw.cmd', './mvnw', or 'mvn' (if wrapper exists, we use that, otherwise we use regular 'mvn')

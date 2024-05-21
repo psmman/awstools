@@ -409,6 +409,8 @@ export class TransformByQState {
 
     private intervalId: NodeJS.Timeout | undefined = undefined
 
+    private numAttemptsToGetJavaHome = 0
+
     public isNotStarted() {
         return this.transformByQState === TransformByQStatus.NotStarted
     }
@@ -619,6 +621,18 @@ export class TransformByQState {
 
     public setJavaHome(javaHome: string) {
         this.javaHome = javaHome
+    }
+
+    public resetJavaHome() {
+        this.javaHome = undefined
+    }
+
+    public incrementAndGetJavaHomeAttempts() {
+        return ++this.numAttemptsToGetJavaHome
+    }
+
+    public resetJavaHomeAttempts() {
+        this.numAttemptsToGetJavaHome = 0
     }
 
     public setChatControllers(controllers: ChatControllerEventEmitters) {
